@@ -430,7 +430,9 @@ def process_lines(state: CommandLineInterfaceState):
 
     try:
         result_idx = 0
-
+        voice = state.tts._get_or_load_voice(state.tts.voice)
+        voice.global_time = 0.0
+        
         for line in state.texts:
             line_voice: typing.Optional[str] = None
             line_id = ""
@@ -449,6 +451,8 @@ def process_lines(state: CommandLineInterfaceState):
 
             process_line(line, state, line_id=line_id, line_voice=line_voice)
             result_idx += 1
+        voice = state.tts._get_or_load_voice(state.tts.voice)    
+        _LOGGER.debug(f"Phonemes: {voice.phoneme_filename}")
 
     except KeyboardInterrupt:
         if state.result_queue is not None:
