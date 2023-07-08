@@ -13,6 +13,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
+import os
+import uuid
 import csv
 import logging
 import platform
@@ -84,6 +86,8 @@ class Mimic3Voice(metaclass=ABCMeta):
         self.phoneme_to_id = phoneme_to_id
         self.phoneme_map = phoneme_map
         self.speaker_map = speaker_map
+        self.global_time = 0.0
+        self.phoneme_filename = str(uuid.uuid4()) + '.txt'
 
     @abstractmethod
     def text_to_phonemes(
@@ -217,13 +221,13 @@ class Mimic3Voice(metaclass=ABCMeta):
             speaker_id_array = np.array([speaker_id], dtype=np.int64)
             inputs["sid"] = speaker_id_array
 
-        _LOGGER.debug(
-            "TTS settings: speaker-id=%s, length-scale=%s, noise-scale=%s, noise-w=%s",
-            speaker_id,
-            length_scale,
-            noise_scale,
-            noise_w,
-        )
+        #_LOGGER.debug(
+        #    "TTS settings: speaker-id=%s, length-scale=%s, noise-scale=%s, noise-w=%s",
+        #    speaker_id,
+        #    length_scale,
+        #    noise_scale,
+        #    noise_w,
+        #)
 
         # Infer audio from phonemes
         start_time = time.perf_counter()
@@ -237,8 +241,46 @@ class Mimic3Voice(metaclass=ABCMeta):
         real_time_factor = (
             infer_sec / audio_duration_sec if audio_duration_sec > 0 else 0.0
         )
+        
+        phoneme_time = audio_duration_sec * 1000 / len(phoneme_ids)
 
-        _LOGGER.debug("RTF: %s", real_time_factor)
+        #_LOGGER.debug("audio_duration_sec: %s", audio_duration_sec)
+        #_LOGGER.debug("start_time: %s", start_time)
+        #_LOGGER.debug("end_time: %s", end_time)
+        #_LOGGER.debug("RTF: %s", real_time_factor)
+    
+        #_LOGGER.debug(f"{len(phoneme_ids)} phoneme ids processed in {infer_sec} seconds")
+        #_LOGGER.debug(f"Timings for each spoken word: {phoneme_time} ms")
+    
+        # Create a reverse map from phoneme id to phoneme
+        #id_to_phoneme = {v: k for k, v in self.phoneme_to_id.items()}
+
+        # Calculate and print the timing for each phoneme
+        #for i, phoneme_id in enumerate(phoneme_ids):
+        #    phoneme = id_to_phoneme.get(phoneme_id)
+        #    time_spoken = (i + 1) * phoneme_time
+        #    _LOGGER.debug(f"Phoneme: {phoneme} spoken at {time_spoken:.2f} ms")
+
+        filepath = os.path.join('/var/www/html/tts.computer/phonemes', self.phoneme_filename)
+
+        # Open file to write debug information
+        with open(filepath, 'a') as debug_file:
+            debug_file.write(f"audio_duration_sec: {audio_duration_sec}\n")
+            debug_file.write(f"start_time: {start_time}\n")
+            debug_file.write(f"end_time: {end_time}\n")
+            debug_file.write(f"RTF: {real_time_factor}\n")
+            debug_file.write(f"{len(phoneme_ids)} phoneme ids processed in {infer_sec} seconds\n")
+            debug_file.write(f"Timings for each spoken word: {phoneme_time} ms\n")
+            # Create a reverse map from phoneme id to phoneme
+            id_to_phoneme = {v: k for k, v in self.phoneme_to_id.items()}
+            # Calculate and print the timing for each phoneme
+            for i, phoneme_id in enumerate(phoneme_ids):
+                phoneme = id_to_phoneme.get(phoneme_id)
+                # Update global_time with the start time of each phoneme
+                phoneme_start_global_time = self.global_time
+                # Update the global time for the next phoneme
+                self.global_time += phoneme_time
+                debug_file.write(f"Phoneme: {phoneme} global start time: {phoneme_start_global_time} ms, global end time: {self.global_time} ms\n")
 
         return audio
 
@@ -256,17 +298,17 @@ class Mimic3Voice(metaclass=ABCMeta):
     ) -> "Mimic3Voice":
         """Load a Mimic 3 voice from a directory"""
         voice_dir = Path(voice_dir)
-        _LOGGER.debug("Loading voice from %s", voice_dir)
+        #_LOGGER.debug("Loading voice from %s", voice_dir)
 
         config_path = voice_dir / "config.json"
-        _LOGGER.debug("Loading config from %s", config_path)
+        #_LOGGER.debug("Loading config from %s", config_path)
 
         with open(config_path, "r", encoding="utf-8") as config_file:
             config = TrainingConfig.load(config_file)
 
         # phoneme -> id
         phoneme_ids_path = voice_dir / "phonemes.txt"
-        _LOGGER.debug("Loading model phonemes from %s", phoneme_ids_path)
+        #_LOGGER.debug("Loading model phonemes from %s", phoneme_ids_path)
         with open(phoneme_ids_path, "r", encoding="utf-8") as ids_file:
             phoneme_to_id = phonemes2ids.load_phoneme_ids(ids_file)
 
@@ -288,8 +330,8 @@ class Mimic3Voice(metaclass=ABCMeta):
                     )
 
                     Mimic3Voice._SHARED_MODELS[model_key] = onnx_model
-                else:
-                    _LOGGER.debug("Using shared Onnx model (%s)", model_key)
+                #else:
+                    #_LOGGER.debug("Using shared Onnx model (%s)", model_key)
         else:
             onnx_model = Mimic3Voice._load_model(
                 generator_path,
@@ -302,7 +344,7 @@ class Mimic3Voice(metaclass=ABCMeta):
         phoneme_map: typing.Optional[PHONEME_MAP_TYPE] = None
         phoneme_map_path = voice_dir / "phoneme_map.txt"
         if phoneme_map_path.is_file():
-            _LOGGER.debug("Loading phoneme map from %s", phoneme_map_path)
+            #_LOGGER.debug("Loading phoneme map from %s", phoneme_map_path)
             with open(phoneme_map_path, "r", encoding="utf-8") as map_file:
                 phoneme_map = phonemes2ids.utils.load_phoneme_map(map_file)
 
@@ -310,7 +352,7 @@ class Mimic3Voice(metaclass=ABCMeta):
         speaker_map: typing.Optional[SPEAKER_MAP_TYPE] = None
         speaker_map_path = voice_dir / "speaker_map.csv"
         if speaker_map_path.is_file():
-            _LOGGER.debug("Loading speaker map from %s", speaker_map_path)
+            #_LOGGER.debug("Loading speaker map from %s", speaker_map_path)
             with open(speaker_map_path, "r", encoding="utf-8") as map_file:
                 # id | dataset | name | [alias] | [alias] ...
                 reader = csv.reader(map_file, delimiter="|")
@@ -386,7 +428,7 @@ class Mimic3Voice(metaclass=ABCMeta):
         ] = None,
         use_deterministic_compute: bool = False,
     ) -> onnxruntime.InferenceSession:
-        _LOGGER.debug("Loading model from %s", generator_path)
+        #_LOGGER.debug("Loading model from %s", generator_path)
 
         # Load onnx model
         if session_options is None:
